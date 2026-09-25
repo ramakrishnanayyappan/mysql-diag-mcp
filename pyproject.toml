@@ -1,8 +1,9 @@
 [project]
 name = "mysql-diag-mcp"
-version = "0.1.0"
-description = "Read-only MySQL 5.7 diagnostic MCP over SSH (bastion + remote mysql CLI)."
+version = "0.2.0"
+description = "Read-only, version-agnostic MySQL diagnostics MCP server (5.7 through 8.4+), over SSH+CLI or direct TCP."
 readme = "README.md"
+license = "MIT"
 requires-python = ">=3.11"
 dependencies = [
     "cryptography>=50.0.1",
