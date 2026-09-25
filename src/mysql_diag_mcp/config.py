@@ -30,6 +30,7 @@ class Settings:
     ssh_host: str | None
     ssh_jump: str | None
     ssh_key: str | None
+    mysql_conn_mode: str
     mysql_user: str | None
     mysql_password: str | None
     mysql_socket: str | None
@@ -38,13 +39,17 @@ class Settings:
     mysql_timeout_sec: int
     mysql_connect_timeout_sec: int
     mysql_max_rows: int
+    mysql_ssl_mode: str
+    mysql_ssl_ca: str | None
+    mysql_ssl_cert: str | None
+    mysql_ssl_key: str | None
     info_truncate: int
     innodb_section_truncate: int
 
     @property
     def missing(self) -> list[str]:
         needed: list[str] = []
-        if not self.ssh_host:
+        if self.mysql_conn_mode == "ssh" and not self.ssh_host:
             needed.append("SSH_HOST")
         if not self.mysql_user:
             needed.append("MYSQL_USER")
@@ -56,6 +61,7 @@ def load_settings() -> Settings:
         ssh_host=_env_opt("SSH_HOST"),
         ssh_jump=_env_opt("SSH_JUMP"),
         ssh_key=_env_opt("SSH_KEY"),
+        mysql_conn_mode=(_env_opt("MYSQL_CONN_MODE") or "ssh").lower(),
         mysql_user=_env_opt("MYSQL_USER"),
         mysql_password=_env_opt("MYSQL_PASSWORD"),
         mysql_socket=_env_opt("MYSQL_SOCKET"),
@@ -64,6 +70,10 @@ def load_settings() -> Settings:
         mysql_timeout_sec=_env_int("MYSQL_TIMEOUT_SEC", 8),
         mysql_connect_timeout_sec=_env_int("MYSQL_CONNECT_TIMEOUT_SEC", 5),
         mysql_max_rows=_env_int("MYSQL_MAX_ROWS", 200),
+        mysql_ssl_mode=(_env_opt("MYSQL_SSL_MODE") or "disabled").lower(),
+        mysql_ssl_ca=_env_opt("MYSQL_SSL_CA"),
+        mysql_ssl_cert=_env_opt("MYSQL_SSL_CERT"),
+        mysql_ssl_key=_env_opt("MYSQL_SSL_KEY"),
         info_truncate=_env_int("INFO_TRUNCATE", 512),
         innodb_section_truncate=_env_int("INNODB_SECTION_TRUNCATE", 8000),
     )

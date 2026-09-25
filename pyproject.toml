@@ -5,7 +5,9 @@ description = "Read-only MySQL 5.7 diagnostic MCP over SSH (bastion + remote mys
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
+    "cryptography>=50.0.1",
     "mcp>=1.9.0,<2",
+    "pymysql>=1.2.3",
     "python-dotenv>=1.0.0",
 ]
 

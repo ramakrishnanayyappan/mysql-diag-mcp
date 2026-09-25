@@ -9,6 +9,7 @@ def _settings(**overrides: object) -> Settings:
         ssh_host="user@dbhost",
         ssh_jump="user@bastion",
         ssh_key="/tmp/id_ed25519",
+        mysql_conn_mode="ssh",
         mysql_user="mcp_diag",
         mysql_password="s3cret",
         mysql_socket="/var/run/mysqld/mysqld.sock",
@@ -17,6 +18,10 @@ def _settings(**overrides: object) -> Settings:
         mysql_timeout_sec=8,
         mysql_connect_timeout_sec=5,
         mysql_max_rows=200,
+        mysql_ssl_mode="disabled",
+        mysql_ssl_ca=None,
+        mysql_ssl_cert=None,
+        mysql_ssl_key=None,
         info_truncate=512,
         innodb_section_truncate=8000,
     )

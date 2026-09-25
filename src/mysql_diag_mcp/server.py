@@ -13,8 +13,8 @@ from mcp.server.fastmcp import FastMCP
 from mysql_diag_mcp import capabilities, queries
 from mysql_diag_mcp.config import load_settings
 from mysql_diag_mcp.explain import ExplainRejected, validate_explain_sql
+from mysql_diag_mcp.backend import run_mysql
 from mysql_diag_mcp.parse import parse_innodb_status, pick_keys, status_map, to_number, truncate_field
-from mysql_diag_mcp.ssh import run_mysql
 
 log = logging.getLogger("mysql_diag_mcp")
 
