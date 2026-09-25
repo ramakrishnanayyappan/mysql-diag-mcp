@@ -101,9 +101,9 @@ stdin), not on `ps` argv, in `ssh` mode.
 
 By default this runs over `stdio`: one client spawns it as a local
 subprocess. It can instead run as a persistent HTTP service that many
-different users/agents (Claude, Cursor, or anything else that speaks MCP)
-connect to over the network, instead of everyone needing their own local
-checkout and DB credentials.
+different users/agents, using any MCP-compatible client, connect to over
+the network, instead of everyone needing their own local checkout and DB
+credentials.
 
 **Where you run this, and how it reaches your MySQL server(s), is entirely
 up to you/ops** — it doesn't need to sit next to the database. Both
