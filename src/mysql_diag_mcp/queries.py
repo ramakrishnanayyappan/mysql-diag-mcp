@@ -9,6 +9,8 @@ SELECT
   @@read_only AS read_only
 """.strip()
 
+VERSION_PROBE = "SELECT VERSION() AS version"
+
 PROCESSLIST = "SHOW FULL PROCESSLIST"
 
 ACTIVE_QUERIES = """
