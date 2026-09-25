@@ -27,6 +27,13 @@ def _settings(**overrides: object) -> Settings:
         mysql_ssl_key=None,
         info_truncate=512,
         innodb_section_truncate=8000,
+        mcp_transport="stdio",
+        mcp_host="127.0.0.1",
+        mcp_port=8000,
+        mcp_allowed_hosts=(),
+        mcp_allowed_origins=(),
+        mcp_auth_tokens=None,
+        mcp_allow_no_auth=False,
     )
     base.update(overrides)
     return Settings(**base)  # type: ignore[arg-type]

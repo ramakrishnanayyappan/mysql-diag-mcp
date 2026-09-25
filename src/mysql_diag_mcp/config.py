@@ -25,6 +25,20 @@ def _env_opt(name: str) -> str | None:
     return raw or None
 
 
+def _env_bool(name: str, default: bool) -> bool:
+    raw = os.environ.get(name, "").strip().lower()
+    if not raw:
+        return default
+    return raw in ("1", "true", "yes", "on")
+
+
+def _env_list(name: str) -> tuple[str, ...]:
+    raw = os.environ.get(name, "").strip()
+    if not raw:
+        return ()
+    return tuple(item.strip() for item in raw.split(",") if item.strip())
+
+
 @dataclass(frozen=True)
 class Settings:
     ssh_host: str | None
@@ -45,6 +59,13 @@ class Settings:
     mysql_ssl_key: str | None
     info_truncate: int
     innodb_section_truncate: int
+    mcp_transport: str
+    mcp_host: str
+    mcp_port: int
+    mcp_allowed_hosts: tuple[str, ...]
+    mcp_allowed_origins: tuple[str, ...]
+    mcp_auth_tokens: str | None
+    mcp_allow_no_auth: bool
 
     @property
     def missing(self) -> list[str]:
@@ -54,6 +75,26 @@ class Settings:
         if not self.mysql_user:
             needed.append("MYSQL_USER")
         return needed
+
+    @property
+    def network_auth_error(self) -> str | None:
+        """None if it's safe to start; otherwise the reason to refuse.
+
+        Network transports default to requiring MCP_AUTH_TOKENS so a shared
+        server isn't accidentally exposed unauthenticated; MCP_ALLOW_NO_AUTH
+        is an explicit opt-out for ops relying on network-level controls
+        instead.
+        """
+        if self.mcp_transport == "stdio":
+            return None
+        if self.mcp_auth_tokens or self.mcp_allow_no_auth:
+            return None
+        return (
+            "Refusing to start an unauthenticated network MCP server. Set "
+            "MCP_AUTH_TOKENS (e.g. token1:alice,token2:bob) or explicitly "
+            "set MCP_ALLOW_NO_AUTH=true if you are relying on network-level "
+            "access controls instead."
+        )
 
 
 def load_settings() -> Settings:
@@ -76,4 +117,11 @@ def load_settings() -> Settings:
         mysql_ssl_key=_env_opt("MYSQL_SSL_KEY"),
         info_truncate=_env_int("INFO_TRUNCATE", 512),
         innodb_section_truncate=_env_int("INNODB_SECTION_TRUNCATE", 8000),
+        mcp_transport=(_env_opt("MCP_TRANSPORT") or "stdio").lower(),
+        mcp_host=_env_opt("MCP_HOST") or "127.0.0.1",
+        mcp_port=_env_int("MCP_PORT", 8000),
+        mcp_allowed_hosts=_env_list("MCP_ALLOWED_HOSTS"),
+        mcp_allowed_origins=_env_list("MCP_ALLOWED_ORIGINS"),
+        mcp_auth_tokens=_env_opt("MCP_AUTH_TOKENS"),
+        mcp_allow_no_auth=_env_bool("MCP_ALLOW_NO_AUTH", False),
     )
