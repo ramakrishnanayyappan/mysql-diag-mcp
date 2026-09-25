@@ -1,4 +1,4 @@
-"""Stdio FastMCP server: curated MySQL 5.7 diagnostic tools."""
+"""Stdio FastMCP server: curated, version-agnostic MySQL diagnostic tools (5.7 through 8.4+)."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from typing import Any
 
 from mcp.server.fastmcp import FastMCP
 
-from mysql_diag_mcp import queries
+from mysql_diag_mcp import capabilities, queries
 from mysql_diag_mcp.config import load_settings
 from mysql_diag_mcp.explain import ExplainRejected, validate_explain_sql
 from mysql_diag_mcp.parse import parse_innodb_status, pick_keys, status_map, to_number, truncate_field
@@ -53,11 +53,19 @@ def mysql_active_queries() -> dict[str, Any]:
 @mcp.tool()
 def mysql_global_status() -> dict[str, Any]:
     """Curated SHOW GLOBAL STATUS keys (threads, tmp tables, InnoDB locks, QPS counters)."""
+    caps = capabilities.get_capabilities(run_mysql)
+    if not caps.get("ok"):
+        return caps
     result = run_mysql(queries.GLOBAL_STATUS)
     if not result.get("ok"):
         return result
     picked = pick_keys(status_map(result["rows"]), queries.STATUS_KEYS)
-    return {"ok": True, "status": picked, "truncated": result.get("truncated", False)}
+    return {
+        "ok": True,
+        "status": picked,
+        "truncated": result.get("truncated", False),
+        "query_cache_available": caps["capabilities"].has_query_cache,
+    }
 
 
 @mcp.tool()
@@ -90,12 +98,19 @@ def mysql_status_delta(sample_seconds: int = 2) -> dict[str, Any]:
 
 @mcp.tool()
 def mysql_variables() -> dict[str, Any]:
-    """Curated SHOW GLOBAL VARIABLES (buffer pool, connections, slow log, 5.7 query cache)."""
+    """Curated SHOW GLOBAL VARIABLES (buffer pool, connections, slow log, query cache if present)."""
+    caps = capabilities.get_capabilities(run_mysql)
+    if not caps.get("ok"):
+        return caps
     result = run_mysql(queries.GLOBAL_VARIABLES)
     if not result.get("ok"):
         return result
     picked = pick_keys(status_map(result["rows"]), queries.VARIABLE_KEYS)
-    return {"ok": True, "variables": picked}
+    return {
+        "ok": True,
+        "variables": picked,
+        "query_cache_available": caps["capabilities"].has_query_cache,
+    }
 
 
 @mcp.tool()
@@ -120,8 +135,12 @@ def mysql_innodb_trx() -> dict[str, Any]:
 
 @mcp.tool()
 def mysql_lock_waits() -> dict[str, Any]:
-    """MySQL 5.7 innodb_lock_waits + innodb_locks blocking chains. Empty if nobody is waiting."""
-    return _query(queries.LOCK_WAITS, "waiting_query", "blocking_query")
+    """Blocking chains: performance_schema.data_locks (8.0+) or innodb_locks (<8.0.18). Empty if nobody is waiting."""
+    caps = capabilities.get_capabilities(run_mysql)
+    if not caps.get("ok"):
+        return caps
+    sql = queries.lock_waits_sql(caps["capabilities"])
+    return _query(sql, "waiting_query", "blocking_query")
 
 
 @mcp.tool()
@@ -132,7 +151,7 @@ def mysql_digest_top() -> dict[str, Any]:
 
 @mcp.tool()
 def mysql_wait_events() -> dict[str, Any]:
-    """Top wait events. Often empty on 5.7 if wait instruments are disabled."""
+    """Top wait events. Often empty if wait instruments are disabled."""
     return _query(queries.WAIT_EVENTS)
 
 
@@ -144,8 +163,43 @@ def mysql_table_io() -> dict[str, Any]:
 
 @mcp.tool()
 def mysql_monitor_clients() -> dict[str, Any]:
-    """Processlist grouped by user/host/command. Use to spot Zabbix or other connection storms."""
+    """Processlist grouped by user/host/command. Use to spot monitoring-agent connection storms."""
     return _query(queries.MONITOR_CLIENTS)
+
+
+@mcp.tool()
+def mysql_replica_status() -> dict[str, Any]:
+    """Replica lag, IO/SQL thread state, last IO/SQL error.
+
+    SHOW REPLICA STATUS (8.0.22+) or SHOW SLAVE STATUS (older). Replication
+    channel metadata only, never binlog row contents. `is_replica: false`
+    with empty rows is the normal result on a standalone/primary server.
+    """
+    caps = capabilities.get_capabilities(run_mysql)
+    if not caps.get("ok"):
+        return caps
+    sql = queries.replica_status_sql(caps["capabilities"])
+    result = run_mysql(sql)
+    if not result.get("ok"):
+        return result
+    if not result["rows"]:
+        return {"ok": True, "is_replica": False, "rows": []}
+    limit = load_settings().info_truncate
+    truncate_field(result["rows"], "Last_IO_Error", limit)
+    truncate_field(result["rows"], "Last_SQL_Error", limit)
+    result["ok"] = True
+    result["is_replica"] = True
+    return result
+
+
+@mcp.tool()
+def mysql_replica_topology() -> dict[str, Any]:
+    """Replicas connected to this server: SHOW REPLICAS (8.0.22+) or SHOW SLAVE HOSTS (older)."""
+    caps = capabilities.get_capabilities(run_mysql)
+    if not caps.get("ok"):
+        return caps
+    sql = queries.replica_topology_sql(caps["capabilities"])
+    return _query(sql)
 
 
 @mcp.tool()

@@ -1,5 +1,12 @@
 """Fixed SQL only. User text is never interpolated except via validate_explain_sql."""
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from mysql_diag_mcp import capabilities
+
 PING = """
 SELECT
   VERSION() AS version,
@@ -45,7 +52,7 @@ FROM information_schema.innodb_trx
 ORDER BY trx_started
 """.strip()
 
-LOCK_WAITS = """
+LOCK_WAITS_LEGACY = """
 SELECT
   r.trx_id AS waiting_trx_id,
   r.trx_mysql_thread_id AS waiting_thread,
@@ -62,6 +69,49 @@ JOIN information_schema.innodb_trx r ON r.trx_id = w.requesting_trx_id
 JOIN information_schema.innodb_trx b ON b.trx_id = w.blocking_trx_id
 JOIN information_schema.innodb_locks l ON l.lock_id = w.requested_lock_id
 """.strip()
+
+# information_schema.innodb_lock_waits/innodb_locks were removed in MySQL
+# 8.0.18+; performance_schema.data_lock_waits/data_locks replace them. Output
+# column names are kept identical to LOCK_WAITS_LEGACY so callers don't need
+# to branch on shape, except lock_table is now a plain "schema.table" string
+# instead of the legacy backtick-quoted form.
+LOCK_WAITS_8_0 = """
+SELECT
+  r.trx_id AS waiting_trx_id,
+  r.trx_mysql_thread_id AS waiting_thread,
+  r.trx_query AS waiting_query,
+  b.trx_id AS blocking_trx_id,
+  b.trx_mysql_thread_id AS blocking_thread,
+  b.trx_query AS blocking_query,
+  CONCAT(rl.object_schema, '.', rl.object_name) AS lock_table,
+  rl.index_name AS lock_index,
+  rl.lock_mode,
+  rl.lock_type
+FROM performance_schema.data_lock_waits w
+JOIN information_schema.innodb_trx r ON r.trx_id = w.requesting_engine_transaction_id
+JOIN information_schema.innodb_trx b ON b.trx_id = w.blocking_engine_transaction_id
+JOIN performance_schema.data_locks rl ON rl.engine_lock_id = w.requesting_engine_lock_id
+""".strip()
+
+
+def lock_waits_sql(caps: capabilities.ServerCapabilities) -> str:
+    return LOCK_WAITS_8_0 if caps.supports_data_locks else LOCK_WAITS_LEGACY
+
+
+REPLICA_STATUS_LEGACY = "SHOW SLAVE STATUS"
+REPLICA_STATUS_8_0 = "SHOW REPLICA STATUS"
+
+REPLICA_TOPOLOGY_LEGACY = "SHOW SLAVE HOSTS"
+REPLICA_TOPOLOGY_8_0 = "SHOW REPLICAS"
+
+
+def replica_status_sql(caps: capabilities.ServerCapabilities) -> str:
+    return REPLICA_STATUS_8_0 if caps.supports_show_replica_status else REPLICA_STATUS_LEGACY
+
+
+def replica_topology_sql(caps: capabilities.ServerCapabilities) -> str:
+    return REPLICA_TOPOLOGY_8_0 if caps.supports_show_replica_status else REPLICA_TOPOLOGY_LEGACY
+
 
 DIGEST_TOP = """
 SELECT
