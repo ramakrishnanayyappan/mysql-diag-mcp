@@ -1,8 +1,16 @@
 import unittest
 from unittest.mock import patch
 
+from mysql_diag_mcp import queries
 from mysql_diag_mcp.capabilities import ServerCapabilities
-from mysql_diag_mcp.server import mcp, mysql_global_status, mysql_lock_waits, mysql_replica_status, mysql_variables
+from mysql_diag_mcp.server import (
+    mcp,
+    mysql_global_status,
+    mysql_lock_waits,
+    mysql_replica_status,
+    mysql_status_delta,
+    mysql_variables,
+)
 
 LEGACY_CAPS = {"ok": True, "capabilities": ServerCapabilities((5, 7, 44), "5.7.44")}
 MODERN_CAPS = {"ok": True, "capabilities": ServerCapabilities((8, 0, 34), "8.0.34")}
@@ -100,6 +108,37 @@ class QueryCacheFieldTests(unittest.TestCase):
         run_mysql.return_value = {"ok": True, "rows": []}
         result = mysql_variables()
         self.assertFalse(result["query_cache_available"])
+
+
+class FullShowRowLimitTests(unittest.TestCase):
+    """SHOW GLOBAL STATUS/VARIABLES return every server variable (hundreds of
+    rows), not just the curated keys -- these tools must request enough rows
+    to see curated keys that sort alphabetically past the generic row cap,
+    or pick_keys silently drops them with no error."""
+
+    @patch("mysql_diag_mcp.server.run_mysql")
+    @patch("mysql_diag_mcp.server.capabilities.get_capabilities", return_value=LEGACY_CAPS)
+    def test_global_status_requests_full_show_row_limit(self, _caps, run_mysql):
+        run_mysql.return_value = {"ok": True, "rows": []}
+        mysql_global_status()
+        _, kwargs = run_mysql.call_args
+        self.assertEqual(kwargs.get("max_rows"), queries.FULL_SHOW_MAX_ROWS)
+
+    @patch("mysql_diag_mcp.server.run_mysql")
+    @patch("mysql_diag_mcp.server.capabilities.get_capabilities", return_value=LEGACY_CAPS)
+    def test_variables_requests_full_show_row_limit(self, _caps, run_mysql):
+        run_mysql.return_value = {"ok": True, "rows": []}
+        mysql_variables()
+        _, kwargs = run_mysql.call_args
+        self.assertEqual(kwargs.get("max_rows"), queries.FULL_SHOW_MAX_ROWS)
+
+    @patch("mysql_diag_mcp.server.run_mysql")
+    def test_status_delta_requests_full_show_row_limit_both_samples(self, run_mysql):
+        run_mysql.return_value = {"ok": True, "rows": []}
+        mysql_status_delta(sample_seconds=1)
+        for call in run_mysql.call_args_list:
+            self.assertEqual(call.kwargs.get("max_rows"), queries.FULL_SHOW_MAX_ROWS)
+        self.assertEqual(run_mysql.call_count, 2)
 
 
 if __name__ == "__main__":

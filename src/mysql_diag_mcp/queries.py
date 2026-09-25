@@ -18,6 +18,16 @@ SELECT
 
 VERSION_PROBE = "SELECT VERSION() AS version"
 
+# SHOW GLOBAL STATUS/VARIABLES return every server variable alphabetically,
+# not just the curated STATUS_KEYS/VARIABLE_KEYS -- 300-600+ rows on a typical
+# server. The generic mysql_max_rows cap (default 200) would silently drop
+# curated keys that sort past that row (e.g. Threads_running, Uptime,
+# max_connections) *before* pick_keys ever gets to filter them, with no
+# error. These two SHOW commands return a small, server-controlled, bounded
+# result (not attacker/user-controlled input), so it's safe to request more
+# rows than the default cap specifically for them.
+FULL_SHOW_MAX_ROWS = 2000
+
 PROCESSLIST = "SHOW FULL PROCESSLIST"
 
 ACTIVE_QUERIES = """

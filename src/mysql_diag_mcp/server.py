@@ -83,7 +83,7 @@ def mysql_global_status() -> dict[str, Any]:
     caps = capabilities.get_capabilities(run_mysql)
     if not caps.get("ok"):
         return caps
-    result = run_mysql(queries.GLOBAL_STATUS)
+    result = run_mysql(queries.GLOBAL_STATUS, max_rows=queries.FULL_SHOW_MAX_ROWS)
     if not result.get("ok"):
         return result
     picked = pick_keys(status_map(result["rows"]), queries.STATUS_KEYS)
@@ -99,11 +99,11 @@ def mysql_global_status() -> dict[str, Any]:
 def mysql_status_delta(sample_seconds: int = 2) -> dict[str, Any]:
     """Two GLOBAL STATUS samples; counters as per-second rates, gauges as t0/t1."""
     seconds = max(1, min(int(sample_seconds), 10))
-    first = run_mysql(queries.GLOBAL_STATUS)
+    first = run_mysql(queries.GLOBAL_STATUS, max_rows=queries.FULL_SHOW_MAX_ROWS)
     if not first.get("ok"):
         return first
     time.sleep(seconds)
-    second = run_mysql(queries.GLOBAL_STATUS)
+    second = run_mysql(queries.GLOBAL_STATUS, max_rows=queries.FULL_SHOW_MAX_ROWS)
     if not second.get("ok"):
         return second
     a = pick_keys(status_map(first["rows"]), queries.STATUS_KEYS)
@@ -129,7 +129,7 @@ def mysql_variables() -> dict[str, Any]:
     caps = capabilities.get_capabilities(run_mysql)
     if not caps.get("ok"):
         return caps
-    result = run_mysql(queries.GLOBAL_VARIABLES)
+    result = run_mysql(queries.GLOBAL_VARIABLES, max_rows=queries.FULL_SHOW_MAX_ROWS)
     if not result.get("ok"):
         return result
     picked = pick_keys(status_map(result["rows"]), queries.VARIABLE_KEYS)
