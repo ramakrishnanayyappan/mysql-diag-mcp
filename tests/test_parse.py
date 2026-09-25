@@ -30,6 +30,28 @@ class TsvTests(unittest.TestCase):
         self.assertTrue(rows[0]["Info"].startswith("aaaaaaaa"))
         self.assertIn("truncated", rows[0]["Info"])
 
+    def test_unescapes_embedded_newline_in_field(self):
+        # mysql --batch (without --raw) escapes a literal newline within a field
+        # as the two characters backslash-n, keeping the row on one output line.
+        text = "Id\tInfo\n1\tSELECT 1\\nFROM dual"
+        parsed = parse_tsv(text, max_rows=200)
+        self.assertEqual(parsed["row_count"], 1)
+        self.assertEqual(parsed["rows"][0]["Info"], "SELECT 1\nFROM dual")
+
+    def test_unescapes_tab_and_backslash(self):
+        text = "Id\tInfo\n1\ta\\tb\\\\c"
+        parsed = parse_tsv(text, max_rows=200)
+        self.assertEqual(parsed["rows"][0]["Info"], "a\tb\\c")
+
+    def test_multiline_status_blob_stays_one_row(self):
+        # Regression: SHOW ENGINE INNODB STATUS returns one row whose Status
+        # column is hundreds of lines of text; --raw would have split it into
+        # bogus extra rows since embedded newlines were not escaped.
+        text = "Type\tName\tStatus\nInnoDB\t\tLINE1\\nLINE2\\nLINE3"
+        parsed = parse_tsv(text, max_rows=200)
+        self.assertEqual(parsed["row_count"], 1)
+        self.assertEqual(parsed["rows"][0]["Status"], "LINE1\nLINE2\nLINE3")
+
 
 class InnodbTests(unittest.TestCase):
     def test_sections_and_history_list(self):

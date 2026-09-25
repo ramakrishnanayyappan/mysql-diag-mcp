@@ -87,8 +87,13 @@ def _client_cnf(settings: Settings) -> str:
 
 def _remote_mysql_script(settings: Settings, sql: str) -> str:
     payload = base64.b64encode(_client_cnf(settings).encode("utf-8")).decode("ascii")
+    # No --raw: it disables mysql's escaping of embedded tabs/newlines/backslashes
+    # in field values, which breaks parse_tsv's line-based splitting on any field
+    # containing a literal newline (e.g. a multi-line query text, or the whole
+    # SHOW ENGINE INNODB STATUS blob). parse_tsv unescapes the resulting \n/\t/\\
+    # sequences back into real characters.
     mysql = (
-        "mysql --defaults-extra-file=\"$cnf\" --batch --raw "
+        "mysql --defaults-extra-file=\"$cnf\" --batch "
         f"--connect-timeout={settings.mysql_connect_timeout_sec} "
         f"-e {shlex.quote(sql)}"
     )

@@ -21,12 +21,36 @@ KEEP_INNODB_SECTIONS = (
 )
 
 
+_ESCAPES = {"0": "\0", "n": "\n", "t": "\t", "r": "\r", "\\": "\\"}
+
+
+def _unescape(value: str) -> str:
+    """Undo mysql --batch's backslash-escaping of NUL/tab/newline/CR/backslash.
+
+    Without --raw, mysql escapes these so every row stays on one output line
+    (see the comment in ssh.py's _remote_mysql_script for why --raw is not used).
+    """
+    if "\\" not in value:
+        return value
+    out: list[str] = []
+    i = 0
+    while i < len(value):
+        ch = value[i]
+        if ch == "\\" and i + 1 < len(value):
+            out.append(_ESCAPES.get(value[i + 1], value[i + 1]))
+            i += 2
+        else:
+            out.append(ch)
+            i += 1
+    return "".join(out)
+
+
 def parse_tsv(text: str, max_rows: int) -> dict[str, Any]:
     lines = [line for line in text.splitlines() if line != ""]
     if not lines:
         return {"columns": [], "rows": [], "row_count": 0, "truncated": False}
 
-    headers = lines[0].split("\t")
+    headers = [_unescape(h) for h in lines[0].split("\t")]
     width = len(headers)
     rows: list[dict[str, str]] = []
     source_count = max(0, len(lines) - 1)
@@ -39,6 +63,7 @@ def parse_tsv(text: str, max_rows: int) -> dict[str, Any]:
             parts = parts[: width - 1] + ["\t".join(parts[width - 1 :])]
         elif len(parts) < width:
             parts.extend([""] * (width - len(parts)))
+        parts = [_unescape(p) for p in parts]
         rows.append(dict(zip(headers, parts, strict=True)))
 
     return {
