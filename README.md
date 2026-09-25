@@ -97,6 +97,81 @@ MYSQL_CONN_MODE=direct
 Password is sent as a remote `--defaults-extra-file` (base64 over SSH
 stdin), not on `ps` argv, in `ssh` mode.
 
+## Running as a shared network server
+
+By default this runs over `stdio`: one client spawns it as a local
+subprocess. It can instead run as a persistent HTTP service that many
+different users/agents (Claude, Cursor, or anything else that speaks MCP)
+connect to over the network, instead of everyone needing their own local
+checkout and DB credentials.
+
+**Where you run this, and how it reaches your MySQL server(s), is entirely
+up to you/ops** — it doesn't need to sit next to the database. Both
+connection modes above work the same regardless of placement: `ssh` if this
+host has SSH access to a bastion/DB host, `direct` if it has plain network
+(or VPN/tunnel) access to MySQL itself.
+
+1. Set the network env vars (add to `.env` or pass directly):
+
+   | Variable | Meaning |
+   |---|---|
+   | `MCP_TRANSPORT` | `stdio` (default) / `streamable-http` (recommended) / `sse` (legacy clients) |
+   | `MCP_HOST` | Bind address, e.g. `0.0.0.0` to listen on all interfaces |
+   | `MCP_PORT` | Default `8000` |
+   | `MCP_AUTH_TOKENS` | `token1:alice,token2:bob` — required for any non-`stdio` transport |
+   | `MCP_ALLOW_NO_AUTH` | `true` to explicitly run without token auth (see below) |
+   | `MCP_ALLOWED_HOSTS` / `MCP_ALLOWED_ORIGINS` | Comma-separated; required once `MCP_HOST` is anything other than localhost (see below) |
+
+2. **Auth is required by default.** Starting a `streamable-http`/`sse`
+   server without `MCP_AUTH_TOKENS` refuses to start with a clear error,
+   rather than silently exposing an unauthenticated diagnostics endpoint.
+   Every request needs an `Authorization: Bearer <token>` header matching
+   one of the configured tokens; unmatched/missing tokens get a `401`. Each
+   request is logged with the token's label, method, path, status, and
+   duration — the audit trail for a shared credential now serving multiple
+   people. If you're deliberately relying on network-level access control
+   instead (firewall, VPN, an authenticating reverse proxy), set
+   `MCP_ALLOW_NO_AUTH=true` to opt out explicitly.
+
+3. **This app serves plain HTTP — it does not terminate TLS.** Put a
+   reverse proxy (nginx, Caddy, your load balancer) in front for HTTPS;
+   forward `Authorization` headers through unchanged.
+
+4. **DNS-rebinding protection**: once `MCP_HOST` is not `127.0.0.1`/
+   `localhost`, set `MCP_ALLOWED_HOSTS`/`MCP_ALLOWED_ORIGINS` to the
+   hostname(s)/origin(s) clients will actually use to reach this server —
+   otherwise the SDK's rebinding protection will reject requests with
+   `421 Invalid Host header`.
+
+5. Run it directly:
+
+   ```bash
+   MCP_TRANSPORT=streamable-http MCP_HOST=0.0.0.0 MCP_AUTH_TOKENS=devtoken:alice \
+     uv run python -m mysql_diag_mcp
+   ```
+
+   Or with Docker:
+
+   ```bash
+   docker build -t mysql-diag-mcp .
+   docker run -p 8000:8000 --env-file .env \
+     -e MCP_AUTH_TOKENS=devtoken:alice \
+     mysql-diag-mcp
+   ```
+
+   For `MYSQL_CONN_MODE=ssh` inside the container, mount an SSH key
+   read-only and point `SSH_KEY` at it, e.g.
+   `-v $HOME/.ssh/id_ed25519:/root/.ssh/id_ed25519:ro -e SSH_KEY=/root/.ssh/id_ed25519`.
+
+6. Point your MCP client at `http://<host>:<port>/mcp` (or `/sse` for the
+   legacy transport) with an `Authorization: Bearer <token>` header. The
+   exact way to add a remote HTTP MCP server varies by client and version —
+   check your client's own docs for the current syntax.
+
+All callers share the same MySQL privileges as the one configured DB user —
+no new risk versus the single-user model, just now serving more people; the
+per-request identity logging above is how you attribute usage.
+
 ## MySQL grants
 
 Run as an admin on the target server. No application-schema grants — these
