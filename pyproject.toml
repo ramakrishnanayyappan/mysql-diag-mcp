@@ -1,0 +1,20 @@
+[project]
+name = "mysql-diag-mcp"
+version = "0.1.0"
+description = "Read-only MySQL 5.7 diagnostic MCP over SSH (bastion + remote mysql CLI)."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "mcp>=1.9.0,<2",
+    "python-dotenv>=1.0.0",
+]
+
+[project.scripts]
+mysql-diag-mcp = "mysql_diag_mcp.server:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.uv]
+package = true
