@@ -163,6 +163,28 @@ host has SSH access to a bastion/DB host, `direct` if it has plain network
    read-only and point `SSH_KEY` at it, e.g.
    `-v $HOME/.ssh/id_ed25519:/root/.ssh/id_ed25519:ro -e SSH_KEY=/root/.ssh/id_ed25519`.
 
+   Or with Docker Compose (`compose.yml`, customize as needed — e.g.
+   uncomment the SSH key volume mount, or add an `environment:` block to
+   override individual `.env` values):
+
+   ```bash
+   docker compose up -d --build
+   ```
+
+   This is also the easiest path if you manage the container from Docker
+   Desktop's GUI rather than the CLI — Desktop's own "Run" dialog only
+   lets you add environment variables one at a time, with no equivalent of
+   `--env-file`; Compose's `env_file:` directive loads the whole file at
+   once, and Desktop's Containers view manages a Compose-started container
+   the same way it manages any other.
+
+   **`MCP_TRANSPORT` must be `streamable-http` (or `sse`) in `.env` before
+   running detached like this.** Left at the default `stdio`, the server
+   starts, immediately hits EOF on stdin (nothing is attached to it in a
+   detached container), exits, and — because of `restart: unless-stopped`
+   — restart-loops forever with no error in the logs, just repeated clean
+   startups. `docker compose ps` showing `Restarting` is the symptom.
+
 6. Point your MCP client at `http://<host>:<port>/mcp` (or `/sse` for the
    legacy transport) with an `Authorization: Bearer <token>` header. The
    exact way to add a remote HTTP MCP server varies by client and version —

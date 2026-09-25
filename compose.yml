@@ -1,0 +1,30 @@
+# IMPORTANT: this runs the container detached, with no client attached to
+# its stdin/stdout -- so MCP_TRANSPORT in your .env MUST be "streamable-http"
+# (or "sse") before using this file. Left as the default "stdio", the server
+# starts, immediately hits EOF on stdin, exits, and -- because of
+# restart: unless-stopped below -- restart-loops forever. `docker compose ps`
+# will show "Restarting" if this happens; `docker compose logs` won't show an
+# error, just repeated clean startups. stdio mode is only useful for the
+# `uv run python -m mysql_diag_mcp` / local-client workflow in the README's
+# Setup section, not for a detached container.
+services:
+  mysql-diag-mcp:
+    build: .
+    # Or skip the local build and pull a published image instead:
+    # image: mysql-diag-mcp:latest
+    container_name: mysql-diag-mcp
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - "8000:8000"
+    # Add/override individual settings here instead of editing .env, e.g.:
+    # environment:
+    #   MCP_TRANSPORT: streamable-http
+    #   MCP_AUTH_TOKENS: devtoken:alice
+    #   MCP_HOST: 0.0.0.0
+
+    # Only needed for MYSQL_CONN_MODE=ssh: mount a private key read-only and
+    # point SSH_KEY at its in-container path (also set in .env or above).
+    # volumes:
+    #   - ${HOME}/.ssh/id_ed25519:/root/.ssh/id_ed25519:ro
