@@ -28,3 +28,17 @@ services:
     # point SSH_KEY at its in-container path (also set in .env or above).
     # volumes:
     #   - ${HOME}/.ssh/id_ed25519:/root/.ssh/id_ed25519:ro
+
+    # If SSH_HOST/SSH_JUMP in .env reference hosts only resolvable via your
+    # internal DNS (a VPN-provided nameserver and/or search domain your host
+    # OS is configured with but the container's own network namespace is
+    # not), the container will fail with "Could not resolve hostname" even
+    # though the same hostname resolves fine when you run this locally with
+    # `uv run`. Point the container at the same internal nameserver(s) your
+    # host uses (see `scutil --dns` on macOS / `resolvectl status` on Linux
+    # for the actual values) and, if you rely on bare/short hostnames rather
+    # than FQDNs, the same search domain:
+    # dns:
+    #   - 10.0.0.53          # your internal nameserver IP(s)
+    # dns_search:
+    #   - internal.example.com
