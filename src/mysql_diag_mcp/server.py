@@ -1,4 +1,9 @@
-"""Stdio FastMCP server: curated, version-agnostic MySQL diagnostic tools (5.7 through 8.4+)."""
+"""FastMCP server: curated, version-agnostic MySQL diagnostic tools (5.7 through 8.4+).
+
+Serves over stdio (default, one local client) or streamable-http/sse (a
+shared network service for multiple clients, with bearer-token auth --
+see remote.py and MCP_TRANSPORT/MCP_AUTH_TOKENS in .env.example).
+"""
 
 from __future__ import annotations
 
@@ -9,16 +14,38 @@ from pathlib import Path
 from typing import Any
 
 from mcp.server.fastmcp import FastMCP
+from mcp.server.transport_security import TransportSecuritySettings
 
 from mysql_diag_mcp import capabilities, queries
+from mysql_diag_mcp.backend import run_mysql
 from mysql_diag_mcp.config import load_settings
 from mysql_diag_mcp.explain import ExplainRejected, validate_explain_sql
-from mysql_diag_mcp.backend import run_mysql
 from mysql_diag_mcp.parse import parse_innodb_status, pick_keys, status_map, to_number, truncate_field
 
 log = logging.getLogger("mysql_diag_mcp")
 
-mcp = FastMCP("mysql-diag")
+_settings = load_settings()
+
+# Only build an explicit TransportSecuritySettings when the operator actually
+# configured allowed hosts/origins. Passing one unconditionally (even with
+# empty lists) overrides FastMCP's own default, which is permissive for
+# localhost -- an empty explicit override rejects every request, including
+# from 127.0.0.1, with 421 Invalid Host header.
+_transport_security = (
+    TransportSecuritySettings(
+        allowed_hosts=list(_settings.mcp_allowed_hosts),
+        allowed_origins=list(_settings.mcp_allowed_origins),
+    )
+    if (_settings.mcp_allowed_hosts or _settings.mcp_allowed_origins)
+    else None
+)
+
+mcp = FastMCP(
+    "mysql-diag",
+    host=_settings.mcp_host,
+    port=_settings.mcp_port,
+    transport_security=_transport_security,
+)
 
 _RUNBOOK = Path(__file__).with_name("runbook.md").read_text(encoding="utf-8")
 
@@ -224,7 +251,18 @@ def main() -> None:
         stream=sys.stderr,
         format="%(name)s %(levelname)s %(message)s",
     )
-    mcp.run(transport="stdio")
+    if _settings.mcp_transport == "stdio":
+        mcp.run(transport="stdio")
+        return
+
+    auth_error = _settings.network_auth_error
+    if auth_error:
+        log.error(auth_error)
+        raise SystemExit(auth_error)
+
+    from mysql_diag_mcp.remote import serve
+
+    serve(mcp, _settings)
 
 
 if __name__ == "__main__":
